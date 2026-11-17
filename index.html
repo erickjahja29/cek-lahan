@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#1d2620">
 <title>Cek Lahan</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -47,7 +47,9 @@
 [hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; overflow: hidden; }
 body { background: #1d2620; color: var(--fg); font-family: var(--font); font-size: 15px; -webkit-font-smoothing: antialiased; }
-#map { position: fixed; inset: 0; background: #1d2620; }
+#map { position: fixed; inset: 0; background: #1d2620; touch-action: none; }   /* semua gestur di peta (geser, cubit) ditangani peta, bukan browser */
+html, body { overscroll-behavior: none; }
+.sheet-body { touch-action: pan-y; }
 #map.draw { cursor: crosshair; }
 
 .glass { background: var(--glass); border: 1px solid var(--glass-line); box-shadow: var(--glass-shadow);
@@ -135,6 +137,8 @@ tr + tr td, tbody tr td { border-top: 1px solid var(--soft-2); }
 .btn:hover { background: var(--soft-2); }
 .btn.primary { background: var(--ink); color: var(--ink-fg); }
 .btn svg { width: 16px; height: 16px; }
+.namaf { display: flex; flex-direction: column; gap: 6px; }
+.namaf input { width: 100%; }
 .exports { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .exports .wide { grid-column: 1 / -1; }
 .cta { border-radius: 18px; padding: 14px; background: var(--accent-soft); font-size: 13px; line-height: 1.5; }
@@ -157,9 +161,14 @@ tr + tr td, tbody tr td { border-top: 1px solid var(--soft-2); }
 .leaflet-bottom.leaflet-right { bottom: 56px; }
 .leaflet-control-attribution { font-size: 10px; border-radius: 8px 0 0 0; }
 .leaflet-control-scale-line { border-radius: 4px; }
-.vtx { background: none; border: 0; }
-.vtx i { position: absolute; left: 0; top: 0; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 3px solid #E0531B; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
-.vtx span { position: absolute; left: 18px; top: -14px; font: 700 12px var(--font); color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; white-space: nowrap; }
+.vtx, .mid { background: none; border: 0; touch-action: none; }
+/* area sentuh 44 px (standar jari), lingkaran yang terlihat tetap kecil di tengah */
+.vtx i { position: absolute; left: 13px; top: 13px; width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid #E0531B; box-shadow: 0 1px 4px rgba(0,0,0,.45); box-sizing: border-box; }
+.vtx.leaflet-drag-target i, .vtx:active i { transform: scale(1.35); background: #FFE7DC; }
+.vtx span { position: absolute; left: 34px; top: 2px; font: 700 12px var(--font); color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; white-space: nowrap; pointer-events: none; }
+.mid i { position: absolute; left: 11px; top: 11px; width: 14px; height: 14px; border-radius: 50%; background: rgba(255,255,255,.55); border: 2px solid #E0531B; box-sizing: border-box; }
+.mid i::after { content: '+'; position: absolute; inset: -3px 0 0; text-align: center; font: 700 11px/14px var(--font); color: #B03A0E; }
+.mid:hover i, .mid:active i { background: #fff; transform: scale(1.25); }
 
 dialog { border: 0; border-radius: 24px; background: var(--glass-strong); color: var(--fg); width: min(640px, 92vw); padding: 0; box-shadow: var(--glass-shadow);
   -webkit-backdrop-filter: blur(22px) saturate(180%); backdrop-filter: blur(22px) saturate(180%); }
@@ -222,7 +231,7 @@ dialog::backdrop { background: rgba(6, 10, 14, 0.45); }
   <button class="seg" id="bUndo" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 010 10h-3"/></svg>Batalkan</button>
   <button class="seg" id="bClear" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Hapus</button>
 </nav>
-<div class="hint glass" id="hint">Klik peta untuk menambah titik sudut · seret titik untuk memindahkan</div>
+<div class="hint glass" id="hint">Klik peta: tambah titik · klik garis atau tanda + : sisipkan titik · seret titik: pindahkan</div>
 
 <div class="side">
   <div class="imgdate glass" id="imgdate">Memuat info citra…</div>
@@ -277,6 +286,8 @@ dialog::backdrop { background: rgba(6, 10, 14, 0.45); }
       </div>
       <div class="tblwrap"><table id="tbl"><thead><tr><th>Titik</th><th id="h1">X</th><th id="h2">Y</th></tr></thead><tbody></tbody></table></div>
       <div class="note" id="zoneNote"></div>
+      <div class="namaf"><label for="nmBidang">Nama bidang (opsional, dipakai di judul &amp; nama file)</label>
+        <input id="nmBidang" maxlength="60" autocomplete="off" placeholder="mis. Kebun Pak Budi Cibinong"></div>
       <div class="exports">
         <button class="btn primary wide" id="ePdf" type="button">Unduh PDF sketsa bidang</button>
         <button class="btn" id="eKml" type="button">KML</button>
@@ -426,16 +437,56 @@ dialog::backdrop { background: rgba(6, 10, 14, 0.45); }
   const poly = L.polygon([], { color: '#ff7a45', weight: 2.5, fillColor: '#E0531B', fillOpacity: 0.22, interactive: false }).addTo(map);
   let markers = [];
 
-  function drawPoly() { poly.setLatLngs(pts.map(([lo, la]) => [la, lo])); }
+  // Riwayat untuk tombol Batalkan (semua perubahan: tambah, sisip, geser, hapus, impor)
+  let riwayat = [];
+  const simpan = () => { riwayat.push(pts.map(q => q.slice())); if (riwayat.length > 60) riwayat.shift(); };
+  let mids = [];
+  function midPos(i) { const a = pts[i], b = pts[(i + 1) % pts.length]; return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; }
+  function drawPoly() {
+    poly.setLatLngs(pts.map(([lo, la]) => [la, lo]));
+    mids.forEach((m, i) => { if (pts[i] && pts[(i + 1) % pts.length]) { const q = midPos(i); m.setLatLng([q[1], q[0]]); } });
+  }
+  // Sisipkan titik baru setelah indeks i (di sisi T(i+1)–T(i+2)); penomoran otomatis bergeser.
+  function sisip(i, ll) { simpan(); pts.splice(i + 1, 0, ll); }
   function rebuildMarkers() {
-    markers.forEach(m => m.remove());
+    markers.forEach(m => m.remove()); mids.forEach(m => m.remove()); mids = [];
+    const aktif = mode === 'draw';
     markers = pts.map(([lo, la], i) => {
-      const m = L.marker([la, lo], { draggable: mode === 'draw', autoPan: true, keyboard: false,
-        icon: L.divIcon({ className: 'vtx', html: `<i></i><span>T${i + 1}</span>`, iconSize: [14, 14], iconAnchor: [7, 7] }) }).addTo(map);
+      const m = L.marker([la, lo], { draggable: aktif, autoPan: true, keyboard: false, bubblingMouseEvents: false,
+        icon: L.divIcon({ className: 'vtx', html: `<i></i><span>T${i + 1}</span>`, iconSize: [44, 44], iconAnchor: [22, 22] }) }).addTo(map);
+      m.on('dragstart', simpan);
       m.on('drag', e => { const p = e.target.getLatLng(); pts[i] = [p.lng, p.lat]; drawPoly(); hover = pts[i]; readout(); });
       m.on('dragend', () => update(false));
+      m.on('contextmenu', e => {   // klik kanan / tekan lama: hapus titik ini
+        L.DomEvent.stop(e); if (mode !== 'draw') return;
+        simpan(); pts.splice(i, 1); update(); toast(`Titik T${i + 1} dihapus. Nomor titik disesuaikan.`);
+      });
       return m;
     });
+    // Pegangan "+" di tengah setiap sisi: ketuk atau seret untuk menyisipkan titik di sisi itu
+    const nSisi = pts.length >= 3 ? pts.length : pts.length - 1;
+    if (aktif) for (let i = 0; i < nSisi; i++) {
+      const q = midPos(i);
+      const h = L.marker([q[1], q[0]], { draggable: true, keyboard: false, bubblingMouseEvents: false, zIndexOffset: -500,
+        icon: L.divIcon({ className: 'mid', html: '<i></i>', iconSize: [36, 36], iconAnchor: [18, 18] }), title: `Sisipkan titik antara T${i + 1} dan T${(i + 1) % pts.length + 1}` }).addTo(map);
+      let baru = -1;
+      h.on('dragstart', () => { sisip(i, midPos(i)); baru = i + 1; });
+      h.on('drag', e => { if (baru < 0) return; const p = e.target.getLatLng(); pts[baru] = [p.lng, p.lat];
+        poly.setLatLngs(pts.map(([lo, la]) => [la, lo])); hover = pts[baru]; readout(); });
+      h.on('dragend', () => { update(); toast(`Titik baru jadi T${baru + 1}; titik setelahnya bergeser nomor.`); baru = -1; });
+      h.on('click', e => { L.DomEvent.stop(e); sisip(i, midPos(i)); update(); toast(`Titik disisipkan sebagai T${i + 2}; nomor titik disesuaikan.`); });
+      mids.push(h);
+    }
+  }
+  // Jarak piksel dari titik layar ke sisi poligon terdekat → indeks sisi (untuk klik di dekat garis)
+  function sisiTerdekat(pt) {
+    const nSisi = pts.length >= 3 ? pts.length : pts.length - 1; let best = -1, bd = Infinity;
+    for (let i = 0; i < nSisi; i++) {
+      const a = map.latLngToContainerPoint([pts[i][1], pts[i][0]]), b = map.latLngToContainerPoint([pts[(i + 1) % pts.length][1], pts[(i + 1) % pts.length][0]]);
+      const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / L2));
+      const d = Math.hypot(pt.x - (a.x + t * dx), pt.y - (a.y + t * dy)); if (d < bd && t > 0.04 && t < 0.96) { bd = d; best = i; }
+    }
+    return bd <= 14 ? best : -1;
   }
 
   // ---------- Panel hasil ----------
@@ -471,8 +522,8 @@ dialog::backdrop { background: rgba(6, 10, 14, 0.45); }
   function setMode(m) { mode = m; $('mDraw').classList.toggle('on', m === 'draw'); $('mPan').classList.toggle('on', m === 'pan'); $('map').classList.toggle('draw', m === 'draw');
     // Gambar: peta terkunci (tidak bisa digeser, zoom tetap bisa), titik bisa diklik & diseret. Geser: peta bisa digeser, titik terkunci.
     if (m === 'draw') map.dragging.disable(); else map.dragging.enable();
-    markers.forEach(k => k.dragging && (m === 'draw' ? k.dragging.enable() : k.dragging.disable()));
-    $('hint').textContent = m === 'draw' ? 'Mode gambar: klik untuk menambah titik, seret titik untuk memindahkan · pindah peta lewat tombol Geser' : 'Mode geser: seret peta untuk berpindah · titik terkunci'; }
+    rebuildMarkers();
+    $('hint').textContent = m === 'draw' ? 'Klik peta: tambah titik · klik garis atau tanda + : sisipkan titik · seret titik: pindahkan · tekan lama/klik kanan titik: hapus' : 'Mode geser: seret peta untuk berpindah · titik terkunci'; }
   let downPt = null;
   map.on('mousedown', e => { downPt = e.containerPoint; });
   map.on('click', e => {
@@ -480,7 +531,9 @@ dialog::backdrop { background: rgba(6, 10, 14, 0.45); }
     if (downPt && downPt.distanceTo(e.containerPoint) > 6) return;
     const p = [e.latlng.lng, e.latlng.lat];
     if (!inIndonesia(p)) { toast('Titik di luar wilayah Indonesia.'); return; }
-    pts.push(p); update();
+    const s2 = pts.length >= 2 ? sisiTerdekat(e.containerPoint) : -1;
+    if (s2 >= 0) { sisip(s2, p); update(); toast(`Titik disisipkan sebagai T${s2 + 2}; nomor titik disesuaikan.`); return; }
+    simpan(); pts.push(p); update();
   });
   map.on('mousemove', e => { hover = [e.latlng.lng, e.latlng.lat]; readout(); });
   function readout() {
@@ -488,8 +541,8 @@ dialog::backdrop { background: rgba(6, 10, 14, 0.45); }
     $('readout').innerHTML = `<span><b>WGS84</b>${a.lat.toFixed(6)}, ${a.lon.toFixed(6)}</span><span><b>UTM ${a.utm.z}</b>${a.utm.x.toFixed(1)} ; ${a.utm.y.toFixed(1)}</span><span><b>TM-3 ${a.tm3.z}</b>${a.tm3.x.toFixed(1)} ; ${a.tm3.y.toFixed(1)}</span>`;
   }
   $('mDraw').onclick = () => setMode('draw'); $('mPan').onclick = () => setMode('pan');
-  $('bUndo').onclick = () => { pts.pop(); update(); };
-  $('bClear').onclick = () => { pts = []; update(); toast('Batas dihapus. Klik peta untuk mulai menggambar.'); };
+  $('bUndo').onclick = () => { if (!riwayat.length) { toast('Tidak ada langkah untuk dibatalkan.'); return; } pts = riwayat.pop(); update(); };
+  $('bClear').onclick = () => { if (!pts.length) return; simpan(); pts = []; update(); toast('Batas dihapus. Tekan Batalkan untuk mengembalikan.'); };
   $('zIn').onclick = () => map.zoomIn(); $('zOut').onclick = () => map.zoomOut();
   $('bLabel').onclick = () => { if (!labels) return; const on = map.hasLayer(labels); on ? labels.remove() : labels.addTo(map); $('bLabel').classList.toggle('on', !on); };
   $('bGps').onclick = () => {
@@ -588,7 +641,7 @@ dialog::backdrop { background: rgba(6, 10, 14, 0.45); }
   }
   $('bConv').onclick = convert;
   $('bGo').onclick = () => { const a = convert(); if (a) map.setView([a.lat, a.lon], Math.max(map.getZoom(), 17)); };
-  $('bAdd').onclick = () => { const a = convert(); if (!a) return; pts.push([a.lon, a.lat]); update(); map.panTo([a.lat, a.lon]); toast(`Titik T${pts.length} ditambahkan ke batas.`); };
+  $('bAdd').onclick = () => { const a = convert(); if (!a) return; simpan(); pts.push([a.lon, a.lat]); update(); map.panTo([a.lat, a.lon]); toast(`Titik T${pts.length} ditambahkan ke batas.`); };
 
   // ---------- Unggah ----------
   function parseText(name, txt) {
@@ -614,7 +667,7 @@ dialog::backdrop { background: rgba(6, 10, 14, 0.45); }
     const rd = new FileReader();
     rd.onload = () => {
       try {
-        pts = parseText(file.name, rd.result); update();
+        const baru2 = parseText(file.name, rd.result); simpan(); pts = baru2; update();
         fitPoly(19);
         $('tHasil').click(); toast(`${pts.length} titik dimuat dari ${file.name}.`);
       } catch (e) { $('uErr').textContent = e.message; $('uErr').hidden = false; }
@@ -630,19 +683,30 @@ dialog::backdrop { background: rgba(6, 10, 14, 0.45); }
   // ---------- Ekspor (unduh langsung) ----------
   const dlg = $('dlg');
   function needPoly() { if (pts.length < 3) { toast('Gambar minimal 3 titik dulu.'); return false; } return true; }
+  const namaBidang = () => ($('nmBidang').value || '').trim();
+  const slug = t => t.normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  async function namaFile(ext) {
+    const c = pts.reduce((a, q) => [a[0] + q[0] / pts.length, a[1] + q[1] / pts.length], [0, 0]);
+    let dasar = namaBidang();
+    if (!dasar) { const k = await wilayahOf(c); dasar = k ? `${k.properties.jenis} ${k.properties.nama}` : 'Bidang'; }
+    const d = new Date(), z2 = v => String(v).padStart(2, '0');
+    const waktu = `${d.getFullYear()}${z2(d.getMonth() + 1)}${z2(d.getDate())}-${z2(d.getHours())}${z2(d.getMinutes())}`;
+    const ha = nf(measure(pts).area / 10000, 2).replace('.', '');
+    return `CekLahan_${slug(dasar) || 'Bidang'}_${ha}ha_${waktu}.${ext}`;
+  }
   function download(name, txt, mime) {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: mime })); a.download = name;
     document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); toast(`${name} diunduh.`);
   }
   const llRing = () => pts.concat([pts[0]]);
-  $('eKml').onclick = () => { if (!needPoly()) return; const m = measure(pts);
-    download('cek-lahan.kml', `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n <Placemark>\n  <name>Bidang Cek Lahan</name>\n  <description>Luas ${nf(m.area, 1)} m² (${nf(m.area / 10000, 4)} ha)</description>\n  <Style><LineStyle><color>ff1b53e0</color><width>2</width></LineStyle><PolyStyle><color>401b53e0</color></PolyStyle></Style>\n  <Polygon><outerBoundaryIs><LinearRing><coordinates>\n   ${llRing().map(p => `${p[0].toFixed(7)},${p[1].toFixed(7)},0`).join('\n   ')}\n  </coordinates></LinearRing></outerBoundaryIs></Polygon>\n </Placemark>\n</kml>`, 'application/vnd.google-earth.kml+xml'); };
-  $('eGeo').onclick = () => { if (!needPoly()) return; const m = measure(pts);
-    download('cek-lahan.geojson', JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: { nama: 'Bidang Cek Lahan', luas_m2: +m.area.toFixed(2), keliling_m: +m.per.toFixed(2) }, geometry: { type: 'Polygon', coordinates: [llRing().map(p => [+p[0].toFixed(7), +p[1].toFixed(7)])] } }] }, null, 2), 'application/geo+json'); };
-  $('eCsv').onclick = () => { if (!needPoly()) return;
+  $('eKml').onclick = async () => { if (!needPoly()) return; const m = measure(pts);
+    download(await namaFile('kml'), `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n <Placemark>\n  <name>${(namaBidang() || 'Bidang Cek Lahan').replace(/[<&>]/g, '')}</name>\n  <description>Luas ${nf(m.area, 1)} m² (${nf(m.area / 10000, 4)} ha)</description>\n  <Style><LineStyle><color>ff1b53e0</color><width>2</width></LineStyle><PolyStyle><color>401b53e0</color></PolyStyle></Style>\n  <Polygon><outerBoundaryIs><LinearRing><coordinates>\n   ${llRing().map(p => `${p[0].toFixed(7)},${p[1].toFixed(7)},0`).join('\n   ')}\n  </coordinates></LinearRing></outerBoundaryIs></Polygon>\n </Placemark>\n</kml>`, 'application/vnd.google-earth.kml+xml'); };
+  $('eGeo').onclick = async () => { if (!needPoly()) return; const m = measure(pts);
+    download(await namaFile('geojson'), JSON.stringify({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: { nama: namaBidang() || 'Bidang Cek Lahan', luas_m2: +m.area.toFixed(2), keliling_m: +m.per.toFixed(2) }, geometry: { type: 'Polygon', coordinates: [llRing().map(p => [+p[0].toFixed(7), +p[1].toFixed(7)])] } }] }, null, 2), 'application/geo+json'); };
+  $('eCsv').onclick = async () => { if (!needPoly()) return;
     const a0 = allFormats(pts[0]);
     const rows = pts.map((p, i) => { const a = allFormats(p); return [`T${i + 1}`, a.lat.toFixed(7), a.lon.toFixed(7), a.utm.x.toFixed(3), a.utm.y.toFixed(3), a.tm3.x.toFixed(3), a.tm3.y.toFixed(3)].join(','); });
-    download('cek-lahan-koordinat.csv', [`titik,lintang,bujur,utm${a0.utm.z}_x,utm${a0.utm.z}_y,tm3_${a0.tm3.z}_x,tm3_${a0.tm3.z}_y`].concat(rows).join('\n'), 'text/csv'); };
+    download(await namaFile('csv'), [`titik,lintang,bujur,utm${a0.utm.z}_x,utm${a0.utm.z}_y,tm3_${a0.tm3.z}_x,tm3_${a0.tm3.z}_y`].concat(rows).join('\n'), 'text/csv'); };
   // PDF A4. Halaman 1: citra satelit + poligon, peta lokasi, ringkasan. Halaman 2+: tabel koordinat.
   const BULAN_P = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   async function wilayahOf(ll) {
@@ -709,6 +773,7 @@ dialog::backdrop { background: rgba(6, 10, 14, 0.45); }
       // ---------- Halaman 1 ----------
       header('SKETSA BIDANG', 'Cek Lahan · GeoAI Solutions');
       const info = [
+        ...(namaBidang() ? [['Nama bidang', namaBidang()]] : []),
         ['Lokasi', wil],
         ['Titik tengah', `${c[1].toFixed(6)}, ${c[0].toFixed(6)} (lintang, bujur)`],
         ['Sistem koordinat', `TM-3 zona ${a0.tm3.z} (BPN) · datum WGS84/SRGI · UTM zona ${a0.utm.z}`],
@@ -717,7 +782,7 @@ dialog::backdrop { background: rgba(6, 10, 14, 0.45); }
       ];
       let y = 31;
       // Citra utama + poligon (kanvas 10 px/mm)
-      const IW = CW, IH = 128, PX = 10, iy = 57;
+      const IW = CW, IH = 128, PX = 10, iy = 31 + info.length * 5 + 1;
       const lc = `+proj=tmerc +lat_0=${c[1]} +lon_0=${c[0]} +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs`;
       const enL = pts.map(q => proj4(WGS, lc, q)), ex = Math.max(...enL.map(v => v[0])) - Math.min(...enL.map(v => v[0])), ey = Math.max(...enL.map(v => v[1])) - Math.min(...enL.map(v => v[1]));
       const SKALA = [200, 250, 500, 750, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 7500, 10000, 15000, 25000, 50000, 100000, 250000];
@@ -740,7 +805,7 @@ dialog::backdrop { background: rgba(6, 10, 14, 0.45); }
         const dx = v[0] - cpx[0], dy = v[1] - cpx[1], dl = Math.hypot(dx, dy) || 1;
         halo(g, `T${i + 1}`, v[0] + dx / dl * fs * 1.15, v[1] + dy / dl * fs * 1.15, fs);
       });
-      info[3][1] = `1:${fmt(skala, 0)} (bila dicetak A4 ukuran asli/100%)`;
+      info.find(r => r[0] === 'Skala peta')[1] = `1:${fmt(skala, 0)} (bila dicetak A4 ukuran asli/100%)`;
       doc.setFontSize(9);
       info.forEach(([k2, v]) => { doc.setTextColor(...mut); doc.text(k2, M, y); doc.setTextColor(...ink); doc.text(v, M + 32, y); y += 5; });
       doc.addImage(main.cv.toDataURL('image/jpeg', 0.86), 'JPEG', M, iy, IW, IH);
@@ -835,7 +900,7 @@ dialog::backdrop { background: rgba(6, 10, 14, 0.45); }
       doc.text(`Sisi (m) = jarak dari titik tersebut ke titik berikutnya (titik terakhir ke T1).`, M, y); y += 5;
       doc.text(`Luas ${fmt(m.area, 1)} m² (${fmt(m.area / 10000, 4)} ha) · keliling ${fmt(m.per, 2)} m · dihitung di ellipsoid WGS84.`, M, y);
       footer(pg, total);
-      doc.save(`sketsa-bidang-cek-lahan-${now.toISOString().slice(0, 10)}.pdf`);
+      doc.save(await namaFile('pdf'));
       toast('PDF sketsa bidang diunduh.');
     } catch (err) {
       toast('PDF gagal dibuat. Coba lagi.'); console.error(err);
@@ -1002,6 +1067,7 @@ dialog::backdrop { background: rgba(6, 10, 14, 0.45); }
     const o = isPhone() ? { paddingTopLeft: [4, 64], paddingBottomRight: [4, sheetH + 74] } : { paddingTopLeft: [410, 60], paddingBottomRight: [72, 70] };
     map.fitBounds(ID_BOUNDS, Object.assign({ animate: false }, o));
   }
+  ['gesturestart', 'gesturechange'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
   update(); setMode('draw'); clampZoom(); fitIndonesia(); fillZones(); convert(); imageryInfo();
 })();
 </script>
